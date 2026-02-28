@@ -956,6 +956,17 @@ func TestJSONEscapeSequenceCompliance(t *testing.T) {
 	assertRepair(t, invalidJSON, expectedJSON)
 }
 
+// TestRepairPythonPgFormat tests repair of Python psycopg-style output containing
+// UUID(), datetime.datetime(), and zoneinfo.ZoneInfo() repr values.
+func TestRepairPythonPgFormat(t *testing.T) {
+	input := `{"id": UUID("550e8400-e29b-41d4-a716-446655440000"), "name": "test", "created_at": datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=zoneinfo.ZoneInfo(key="UTC")), "active": True}`
+	expected := `{"id": "550e8400-e29b-41d4-a716-446655440000", "name": "test", "created_at": "datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=zoneinfo.ZoneInfo(key=\"UTC\"))", "active": true}`
+
+	result, err := JSONRepair(input)
+	require.NoError(t, err, "Python pg format should be repairable, got error: %v", err)
+	assert.Equal(t, expected, result)
+}
+
 // BenchmarkJSONRepair benchmarks the JSON repair function across various scenarios
 func BenchmarkJSONRepair(b *testing.B) {
 	testCases := []struct {

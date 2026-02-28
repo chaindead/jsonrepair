@@ -912,10 +912,14 @@ func parseUnquotedStringWithMode(text *[]rune, i *int, output *strings.Builder, 
 		return false
 	}
 
-	// Check for function name start (MongoDB/JSONP function calls)
+	// Check for function name start (MongoDB/JSONP/Python function calls).
+	// Supports dotted qualified names like datetime.datetime, zoneinfo.ZoneInfo.
 	if isFunctionNameCharStart((*text)[*i]) {
-		for *i < len(*text) && isFunctionNameChar((*text)[*i]) {
+		for *i < len(*text) && (isFunctionNameChar((*text)[*i]) || (*text)[*i] == codeDot) {
 			*i++
+		}
+		for *i > start && (*text)[*i-1] == codeDot {
+			*i--
 		}
 
 		j := *i
@@ -924,6 +928,9 @@ func parseUnquotedStringWithMode(text *[]rune, i *int, output *strings.Builder, 
 		}
 
 		if j < len(*text) && (*text)[j] == codeOpenParenthesis {
+			savedOutputLen := output.Len()
+
+			// Try MongoDB/JSONP style: parse single inner value + closing paren
 			*i = j + 1
 			_, _ = parseValue(text, i, output)
 
@@ -932,7 +939,62 @@ func parseUnquotedStringWithMode(text *[]rune, i *int, output *strings.Builder, 
 				if *i < len(*text) && (*text)[*i] == codeSemicolon {
 					*i++
 				}
+				return true
 			}
+
+			// Complex function call (multiple args, keyword args, nested calls).
+			// Backtrack and capture entire expression as a quoted string.
+			resetOutput(output, output.String()[:savedOutputLen])
+			*i = j + 1
+
+			depth := 1
+			for *i < len(*text) && depth > 0 {
+				ch := (*text)[*i]
+				switch {
+				case ch == codeDoubleQuote || ch == codeQuote:
+					quote := ch
+					*i++
+					for *i < len(*text) && (*text)[*i] != quote {
+						if (*text)[*i] == codeBackslash {
+							*i++
+						}
+						if *i < len(*text) {
+							*i++
+						}
+					}
+					if *i < len(*text) {
+						*i++
+					}
+				case ch == codeOpenParenthesis:
+					depth++
+					*i++
+				case ch == codeCloseParenthesis:
+					depth--
+					if depth > 0 {
+						*i++
+					}
+				default:
+					*i++
+				}
+			}
+
+			if *i < len(*text) && (*text)[*i] == codeCloseParenthesis {
+				*i++
+			}
+
+			symbol := string((*text)[start:*i])
+			output.WriteByte('"')
+			for _, char := range symbol {
+				switch char {
+				case '"':
+					output.WriteString("\\\"")
+				case '\\':
+					output.WriteString("\\\\")
+				default:
+					output.WriteRune(char)
+				}
+			}
+			output.WriteByte('"')
 			return true
 		}
 	}
