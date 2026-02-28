@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/kaptinlin/jsonrepair"
+	"github.com/chaindead/jsonrepair"
 )
 
 func main() {

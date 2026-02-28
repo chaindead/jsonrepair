@@ -1,4 +1,4 @@
-module github.com/kaptinlin/jsonrepair
+module github.com/chaindead/jsonrepair
 
 go 1.26
 
